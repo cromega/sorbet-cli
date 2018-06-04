@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+
+mkdir -p tmp
+curl -s https://sorbet.run/sorbet.js > tmp/sorbet.js
+curl -s https://sorbet.run/sorbet.wasm > tmp/sorbet.wasm
+echo "done"

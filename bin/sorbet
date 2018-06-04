@@ -1,0 +1,79 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+const path = require("path");
+
+const Sorbet = require(path.resolve(__dirname, "../tmp/sorbet.js"));
+
+var wasm = fs.readFileSync(path.resolve(__dirname, "../tmp/sorbet.wasm"));
+var data = Buffer.from(wasm, "utf8");
+
+var sorbetModuleCompile = WebAssembly.compile(data);
+
+
+var stdout = [];
+var print = function(line) {
+	stdout.push(line);
+};
+var flush = function() {
+	//var errorLines = stdout.join("\n").match(/^[^ ]/mg);
+	console.log(stdout.join("\n"));
+	stdout = [];
+}
+
+
+var sorbet = null;
+function compile() {
+    if (sorbet) {
+      // Already compiling or compiled
+      return sorbet;
+    }
+    // For some unkonwn reason this varible has to be new everytime, and can't
+    // be out of the closure
+    var opts = {
+      print: function(line) {
+        print(line);
+      },
+      printErr: function(line) {
+        line = line.replace(/.*\[error\] /, '')
+        line = line.replace(/http:\/\/[^ ]*/, '')
+        line = line.replace('git.corp.stripe.com/stripe-internal', 'github.com/stripe')
+        print(line);
+      },
+      onAbort: function() {
+        // On abort, throw away our WebAssembly instance and create a
+        // new one. This can happen due to out-of-memory, C++ exceptions,
+        // or other reasons; Throwing away and restarting should get us to a healthy state.
+        sorbet = null;
+        flush();
+      },
+      instantiateWasm: function(info, realRecieveInstanceCallBack) {
+        sorbetModuleCompile
+        .then(module =>
+          WebAssembly.instantiate(module, info)
+          .then(instance => realRecieveInstanceCallBack(instance, module))
+          .catch(error => console.log(error))
+        ).catch(function(error) {
+            output.innerText = "Error loading sorbet.wasm. Maybe your adblock blocked it? Some of them are pretty aggressive on github.io domains. We promise we aren't mining crypto currencies on your computer."
+        });
+        return {}; // indicates lazy initialization
+      },
+		};
+		sorbet = Sorbet(opts);
+		return sorbet;
+}
+
+  function typecheck(fileName) {
+      var ruby = fs.readFileSync(fileName, "utf-8");
+      compile().then(module => runCPP(module, ruby));
+  }
+
+  function runCPP(Module, source) {
+    var f = Module.cwrap('typecheck', null, ['string']);
+    f(source + "\n");
+
+    flush();
+  }
+
+var fileToCheck = process.argv[2];
+typecheck(fileToCheck);
