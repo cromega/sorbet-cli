@@ -4,7 +4,7 @@
 
 * Node.js - some version that can run WASM
 
-## Install
+## Fetch the Sorbet libraries
 ```sh
 bin/download
 ```
